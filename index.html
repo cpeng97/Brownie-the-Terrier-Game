@@ -8,7 +8,7 @@
     <script src="https://cdn.jsdelivr.net/npm/phaser@3.55.2/dist/phaser.min.js"></script>
     <style>
         body { margin: 0; background-color: #2c1e1a; display: flex; justify-content: center; align-items: center; height: 100vh; overflow: hidden; font-family: 'VT323', monospace; }
-        canvas { border: 6px solid #5d4037; image-rendering: pixelated; box-shadow: 0 0 30px rgba(0,0,0,0.5); }
+        canvas { border: 4px solid #5d4037; box-shadow: 0 0 30px rgba(0,0,0,0.5); }
     </style>
 </head>
 <body>
@@ -17,22 +17,26 @@ const config = {
     type: Phaser.AUTO,
     width: 800,
     height: 600,
-    pixelArt: true,
     scene: { preload: preload, create: create, update: update }
 };
 
 const game = new Phaser.Game(config);
 let brownie, hand, accessory, score = 0, bites = 0, gameState = 'ONBOARDING';
 let uiPanel, dogMood = 'calm';
-const SCALE_FACTOR = 4; 
 
 function preload() {
-    // Background & Overlays
+    // Adding an Error Handler to tell us WHICH file is missing
+    this.load.on('loaderror', function (file) {
+        console.error('MISSING FILE:', file.src);
+        alert('Cannot find: ' + file.src + '\nCheck capitalization and spaces!');
+    });
+
+    // Backgrounds & Overlays
     this.load.image('bg', 'assets/bg/bg_room.png');
     this.load.image('ol_apple', 'assets/bg/bg_overlay_apple.png');
     this.load.image('ol_barrel', 'assets/bg/bg_overlay_barrel.png');
     this.load.image('ol_bush', 'assets/bg/bg_overlay_bush.png');
-    this.load.image('ol_grass', 'assets/bg/bg_overlay_dry grass.png'); // Fixed name!
+    this.load.image('ol_grass', 'assets/bg/bg_overlay_dry grass.png'); 
     this.load.image('ol_wood', 'assets/bg/bg_overlay_wood.png');
 
     // Brownie Sprites
@@ -64,10 +68,8 @@ function preload() {
 }
 
 function create() {
-    const scene = this;
-
-    // 1. World Setup
-    this.add.image(400, 300, 'bg').setScale(SCALE_FACTOR);
+    // 1. World Setup (No Scaling)
+    this.add.image(400, 300, 'bg').setDisplaySize(800, 600);
 
     // 2. Animations
     this.anims.create({
@@ -82,10 +84,10 @@ function create() {
     });
 
     // 3. Brownie & Accessories
-    brownie = this.add.sprite(400, 400, 'b_idle1').setScale(SCALE_FACTOR).setInteractive().setVisible(false);
-    accessory = this.add.image(400, 400, 'acc_hat').setScale(SCALE_FACTOR).setVisible(false);
+    brownie = this.add.sprite(400, 400, 'b_idle1').setInteractive().setVisible(false);
+    accessory = this.add.image(400, 400, 'acc_hat').setVisible(false);
 
-    // 4. Overlays (Placed in front of Brownie)
+    // 4. Overlays
     const overlayData = [
         {x: 180, y: 480, img: 'ol_barrel'},
         {x: 620, y: 480, img: 'ol_bush'},
@@ -94,92 +96,65 @@ function create() {
         {x: 150, y: 250, img: 'ol_apple'}
     ];
     overlayData.forEach(data => {
-        this.add.image(data.x, data.y, data.img).setScale(SCALE_FACTOR).setDepth(10);
+        this.add.image(data.x, data.y, data.img).setDepth(10);
     });
 
     // 5. Hand Cursor
-    hand = this.add.sprite(0, 0, 'h_neutral').setScale(SCALE_FACTOR).setDepth(100);
+    hand = this.add.sprite(0, 0, 'h_neutral').setDepth(100);
     this.input.setDefaultCursor('none');
     this.input.on('pointermove', (p) => { hand.setPosition(p.x, p.y); });
 
-    // 6. Onboarding Screen
-    showDialogue(this, "Meet Brownie!", "Brownie is a cute Norwich Terrier! \nPet her gently when she's calm. \nIf she looks too excited, watch your fingers!", 'btn_start');
+    // 6. Onboarding
+    showDialogue(this, "Meet Brownie!", "Pet her when she's calm. Avoid her zoomies!", 'btn_start');
 
     // Interaction
-    brownie.on('pointerdown', () => handlePet(scene));
-    
+    brownie.on('pointerdown', () => handlePet(this));
     this.input.on('pointerdown', () => {
         if(gameState === 'PLAY') {
             hand.setTexture('h_pet');
-            scene.time.delayedCall(150, () => { if(gameState !== 'GAMEOVER') hand.setTexture('h_neutral'); });
+            this.time.delayedCall(150, () => { if(gameState !== 'GAMEOVER') hand.setTexture('h_neutral'); });
         }
     });
 }
 
 function handlePet(scene) {
     if (!brownie.visible) return;
-
     if (dogMood === 'excited') {
         bites++;
         brownie.stop();
         brownie.setTexture('b_bite');
         hand.setTexture('h_hurt');
         scene.cameras.main.shake(200, 0.02);
-        
-        let bandage = scene.add.image(hand.x, hand.y - 40, 'ui_bandage').setScale(SCALE_FACTOR);
-        scene.tweens.add({ targets: bandage, y: bandage.y - 80, alpha: 0, duration: 1000 });
-
         if (bites >= 3) triggerGameOver(scene);
     } else {
         score += 25;
         brownie.setTexture('b_happy');
-        let heart = scene.add.image(brownie.x, brownie.y - 60, 'ui_heart').setScale(SCALE_FACTOR);
-        scene.tweens.add({ targets: heart, y: heart.y - 80, alpha: 0, duration: 1000 });
     }
-    
-    // Hide dog after interaction
-    scene.time.delayedCall(300, () => {
-        brownie.setVisible(false);
-        accessory.setVisible(false);
-    });
+    scene.time.delayedCall(300, () => { brownie.setVisible(false); accessory.setVisible(false); });
 }
 
 function spawnBrownie() {
     if (gameState !== 'PLAY') return;
-
-    // Random hiding spots
-    const spots = [
-        {x: 180, y: 440}, {x: 620, y: 440}, {x: 400, y: 480}, {x: 400, y: 260}
-    ];
+    const spots = [{x: 180, y: 440}, {x: 620, y: 440}, {x: 400, y: 480}, {x: 400, y: 260}];
     let spot = spots[Math.floor(Math.random() * spots.length)];
-    
-    // Random Accessory
     const accs = ['acc_hat', 'acc_scarf', 'acc_bow', 'acc_sunflower'];
     accessory.setTexture(accs[Math.floor(Math.random() * accs.length)]);
-
     brownie.setPosition(spot.x, spot.y).setVisible(true);
     accessory.setPosition(spot.x, spot.y).setVisible(true);
-
     dogMood = Math.random() > 0.65 ? 'excited' : 'calm';
     brownie.play(dogMood === 'excited' ? 'anim_excited' : 'anim_idle');
-
-    let upTime = Math.max(600, 1800 - (score * 3));
-    game.scene.scenes[0].time.delayedCall(upTime, () => {
-        brownie.setVisible(false);
-        accessory.setVisible(false);
-        if (gameState === 'PLAY') {
-            game.scene.scenes[0].time.delayedCall(Phaser.Math.Between(600, 1200), spawnBrownie);
-        }
+    game.scene.scenes[0].time.delayedCall(1500, () => {
+        brownie.setVisible(false); accessory.setVisible(false);
+        if (gameState === 'PLAY') game.scene.scenes[0].time.delayedCall(800, spawnBrownie);
     });
 }
 
 function showDialogue(scene, titleT, bodyT, btnKey) {
     uiPanel = scene.add.container(400, 300).setDepth(200);
-    let box = scene.add.image(0, 0, 'ui_box').setScale(SCALE_FACTOR);
+    let box = scene.add.image(0, 0, 'ui_box');
     let title = scene.add.text(0, -90, titleT, { fontSize: '45px', color: '#5d4037', fontFamily: 'VT323' }).setOrigin(0.5);
     let body = scene.add.text(0, 10, bodyT, { fontSize: '22px', color: '#795548', align: 'center', wordWrap: { width: 380 }, fontFamily: 'VT323' }).setOrigin(0.5);
-    let btn = scene.add.image(0, 110, btnKey).setScale(SCALE_FACTOR).setInteractive();
-
+    let btn = scene.add.image(0, 110, btnKey).setInteractive();
     btn.on('pointerdown', () => {
         uiPanel.destroy();
         if (gameState === 'ONBOARDING' || gameState === 'GAMEOVER') {
@@ -187,19 +162,13 @@ function showDialogue(scene, titleT, bodyT, btnKey) {
             spawnBrownie();
         }
     });
-
     uiPanel.add([box, title, body, btn]);
 }
 
 function triggerGameOver(scene) {
     gameState = 'GAMEOVER';
-    brownie.setVisible(false);
-    accessory.setVisible(false);
-    
-    let resultTitle = score >= 500 ? "Doggo Mommy" : (score >= 200 ? "Buddy" : "The Toy");
-    let resultMsg = score >= 500 ? "Perfect! Brownie is calm and loves you!" : (score >= 200 ? "Great job! You and Brownie are besties." : "Oops! Brownie thinks your hand is a toy!");
-
-    showDialogue(scene, resultTitle, resultMsg + "\nFinal Love Points: " + score, 'btn_restart');
+    brownie.setVisible(false); accessory.setVisible(false);
+    showDialogue(scene, "Game Over", "Love Points: " + score, 'btn_restart');
 }
 
 function update() {}
