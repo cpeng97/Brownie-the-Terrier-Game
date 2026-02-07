@@ -22,8 +22,10 @@ const config = {
 const game = new Phaser.Game(config);
 let brownie, hand, currentAcc, score = 0, bites = 0, level = 1, petsThisLevel = 0;
 let gameState = 'ONBOARDING'; 
-let uiPanel, dogMood = 'calm';
+let uiPanel, dogMood = 'calm', statusBar;
+let hearts = [], bandages = [];
 
+// Helper to fit images to a specific width
 function fitToWidth(item, targetWidth) {
     if(!item || !item.width) return;
     const scale = targetWidth / item.width;
@@ -31,14 +33,11 @@ function fitToWidth(item, targetWidth) {
 }
 
 function preload() {
-    // Background & Overlays
     this.load.image('bg', 'assets/bg/bg_room.png');
     this.load.image('ol_barrel', 'assets/bg/bg_overlay_barrel.png');
     this.load.image('ol_bush', 'assets/bg/bg_overlay_bush.png');
     this.load.image('ol_grass', 'assets/bg/bg_overlay_dry_grass.png'); 
     this.load.image('ol_wood', 'assets/bg/bg_overlay_wood.png');
-    
-    // Brownie
     this.load.image('b_idle1', 'assets/sprites/brownie_idle.png');
     this.load.image('b_idle2', 'assets/sprites/brownie_idle_2.png');
     this.load.image('b_idle3', 'assets/sprites/brownie_idle_3.png');
@@ -46,82 +45,111 @@ function preload() {
     this.load.image('b_excite2', 'assets/sprites/brownie_excited_2.png');
     this.load.image('b_happy', 'assets/sprites/brownie_happy.png');
     this.load.image('b_bite', 'assets/sprites/brownie_bite.png');
-
-    // Hand & UI
     this.load.image('h_neutral', 'assets/sprites/hand_neutral.png');
     this.load.image('h_pet', 'assets/sprites/hand_petting.png');
-    this.load.image('ui_box', 'assets/ui/box.png');
+    this.load.image('ui_box', 'assets/ui/ui_dialogue_box.png');
     this.load.image('btn_start', 'assets/ui/ui_button_start.png');
-
-    // Accessories
+    this.load.image('ui_heart', 'assets/ui/ui_heart_full.png');
+    this.load.image('ui_heart_empty', 'assets/ui/ui_heart_empty.png');
+    this.load.image('ui_bandage', 'assets/ui/ui_bandage.png');
     this.load.image('acc_hat', 'assets/acc/acc_hat.png');
     this.load.image('acc_scarf', 'assets/acc/acc_scarf.png');
     this.load.image('acc_bow', 'assets/acc/acc_bow_pink.png');
     this.load.image('acc_sunflower', 'assets/acc/acc_sunflower.png');
-
-    // Error handling
-    this.load.on('loaderror', (file) => { console.log("Failed to load: " + file.src); });
 }
 
 function create() {
     const scene = this;
     this.add.image(400, 300, 'bg').setDisplaySize(800, 600);
 
+    // Animations
     this.anims.create({ key: 'idle', frames: [{key:'b_idle1'}, {key:'b_idle2'}, {key:'b_idle3'}], frameRate: 4, repeat: -1 });
     this.anims.create({ key: 'excite', frames: [{key:'b_excite1'}, {key:'b_excite2'}], frameRate: 8, repeat: -1 });
 
-    // Reference placement
-    const barrel = this.add.image(200, 480, 'ol_barrel').setDepth(10); fitToWidth(barrel, 140);
-    const bush = this.add.image(680, 500, 'ol_bush').setDepth(10); fitToWidth(bush, 180);
-    const grass = this.add.image(450, 550, 'ol_grass').setDepth(10); fitToWidth(grass, 250);
+    // SCALE ADJUSTMENT: Matches reference image scaling
+    const barrel = this.add.image(280, 520, 'ol_barrel').setDepth(10); fitToWidth(barrel, 110);
+    const bush = this.add.image(700, 530, 'ol_bush').setDepth(10); fitToWidth(bush, 160);
+    const grass = this.add.image(450, 560, 'ol_grass').setDepth(10); fitToWidth(grass, 200);
 
     brownie = this.add.sprite(400, 400, 'b_idle1').setInteractive().setVisible(false);
-    fitToWidth(brownie, 130); 
+    fitToWidth(brownie, 85); // Small Brownie like reference
 
     currentAcc = this.add.image(400, 400, 'acc_hat').setVisible(false).setDepth(11);
-    fitToWidth(currentAcc, 130);
+    fitToWidth(currentAcc, 85);
 
-    hand = this.add.sprite(0, 0, 'h_neutral').setDepth(100);
-    fitToWidth(hand, 100); 
+    // STATUS BAR (Top Right)
+    createStatusBar(this);
+
+    // HAND: Follow and Pet animation
+    hand = this.add.sprite(0, 0, 'h_neutral').setDepth(1000); // Top depth
+    fitToWidth(hand, 90); 
     this.input.setDefaultCursor('none');
     
     this.input.on('pointermove', (p) => { hand.setPosition(p.x, p.y); });
-    this.input.on('pointerdown', () => {
+    this.input.on('pointerdown', (p) => {
         hand.setTexture('h_pet');
         this.time.delayedCall(150, () => { if(gameState !== 'DRESS_UP') hand.setTexture('h_neutral'); });
     });
 
-    showDialogue(this, "Meet Brownie!", "Brownie is a cute Norwich Terrier who loves to play! \n\nInstructions: Tap to pet. Pet when she's calm for points. Avoid her when she's too excited!", 600);
+    showOnboarding(this);
 
     brownie.on('pointerdown', () => handlePet(scene));
 }
 
-function showDialogue(scene, title, body, width) {
-    if(uiPanel) uiPanel.destroy();
-    uiPanel = scene.add.container(400, 300).setDepth(200);
+function createStatusBar(scene) {
+    statusBar = scene.add.container(650, 60).setDepth(500).setVisible(false);
+    let barBg = scene.add.image(0, 0, 'ui_box'); fitToWidth(barBg, 220); barBg.setDisplaySize(220, 100);
     
-    // Safety Backing (in case image fails)
-    let safety = scene.add.rectangle(0, 0, width, 400, 0x5d4037, 0.9).setStrokeStyle(4, 0x2c1e1a);
-    let box = scene.add.image(0, 0, 'ui_box'); 
-    if(box.texture.key !== '__MISSING') fitToWidth(box, width);
+    scene.add.text(-90, -30, "Life", { fontSize: '20px', color: '#5d4037' });
+    for(let i=0; i<3; i++) {
+        let h = scene.add.image(-40 + (i*25), -25, 'ui_heart'); fitToWidth(h, 20);
+        hearts.push(h);
+    }
 
-    let tTxt = scene.add.text(0, -120, title, { fontSize: '40px', color: '#ffffff', fontStyle: 'bold' }).setOrigin(0.5);
-    let bTxt = scene.add.text(0, 0, body, { fontSize: '20px', color: '#ffffff', align: 'center', wordWrap: { width: width - 80 } }).setOrigin(0.5);
-    let btn = scene.add.image(0, 140, 'btn_start').setInteractive(); 
-    fitToWidth(btn, 140);
+    scene.add.text(-90, 5, "Bandage", { fontSize: '20px', color: '#5d4037' });
+    for(let i=0; i<5; i++) {
+        let b = scene.add.image(-30 + (i*25), 12, 'ui_bandage'); fitToWidth(b, 22);
+        b.setAlpha(0.3); // Dim bandages initially
+        bandages.push(b);
+    }
+    statusBar.add([barBg]);
+}
 
-    btn.on('pointerdown', () => {
-        uiPanel.destroy();
-        if(gameState === 'ONBOARDING' || gameState === 'LEVEL_UP') { gameState = 'PLAY'; spawnBrownie(); }
-        else if(gameState === 'RESULT') startDressUp(scene);
+function updateStats() {
+    // Bandages light up as you get bitten
+    for(let i=0; i<bandages.length; i++) {
+        bandages[i].setAlpha(i < bites ? 1 : 0.3);
+    }
+    // Hearts dim if you fail (just for visual)
+    if (bites >= 5) hearts.forEach(h => h.setTexture('ui_heart_empty'));
+}
+
+function showOnboarding(scene) {
+    uiPanel = scene.add.container(400, 300).setDepth(500);
+    let box = scene.add.image(0, 0, 'ui_box'); fitToWidth(box, 600);
+    
+    let story = "Meet Brownie!\n\nBrownie is a cute Norwich Terrier who loves to play! If you're too quick or too rough, she may bite your hand in surprise!\n\nInstructions: Tap to pet. Pet when she's calm for points. Avoid her when she's too excited!";
+    
+    let txt = scene.add.text(0, -30, story, { fontSize: '20px', color: '#5d4037', align: 'center', wordWrap: { width: 500 } }).setOrigin(0.5);
+    let btn = scene.add.image(0, 140, 'btn_start').setInteractive().setDepth(501); fitToWidth(btn, 140);
+    
+    btn.on('pointerdown', () => { 
+        uiPanel.destroy(); 
+        statusBar.setVisible(true);
+        startLevel(scene); 
     });
+    uiPanel.add([box, txt, btn]);
+}
 
-    uiPanel.add([safety, box, tTxt, bTxt, btn]);
+function startLevel(scene) {
+    gameState = 'PLAY';
+    petsThisLevel = 0;
+    spawnBrownie();
 }
 
 function spawnBrownie() {
     if (gameState !== 'PLAY') return;
-    const spots = [{x: 200, y: 440}, {x: 680, y: 460}, {x: 450, y: 480}, {x: 400, y: 300}];
+    const spots = [{x: 280, y: 480}, {x: 700, y: 490}, {x: 450, y: 500}, {x: 400, y: 300}];
     let spot = spots[Math.floor(Math.random() * spots.length)];
     brownie.setPosition(spot.x, spot.y).setVisible(true);
     
@@ -139,38 +167,59 @@ function handlePet(scene) {
     if (!brownie.visible || gameState !== 'PLAY') return;
     if (dogMood === 'excited') {
         bites++;
+        updateStats();
         brownie.stop().setTexture('b_bite');
         scene.cameras.main.shake(200, 0.02);
-        if (bites >= 3) triggerEnd(scene);
+        if (bites >= 5) triggerEnd(scene);
     } else {
         petsThisLevel++;
         score += 10;
         brownie.setTexture('b_happy');
-        if (petsThisLevel >= (level * 3)) { // 3 pets to clear lvl 1, 6 for lvl 2, etc.
-            if(level < 3) { level++; gameState = 'LEVEL_UP'; showDialogue(scene, "Level " + level, "Brownie is getting faster!", 400); }
+        if (petsThisLevel >= (level * 3)) {
+            if(level < 3) { level++; showLevelUp(scene); }
             else { triggerEnd(scene); }
         }
     }
     scene.time.delayedCall(300, () => brownie.setVisible(false));
 }
 
+function showLevelUp(scene) {
+    gameState = 'LEVEL_UP';
+    uiPanel = scene.add.container(400, 300).setDepth(500);
+    let box = scene.add.image(0, 0, 'ui_box'); fitToWidth(box, 350);
+    let txt = scene.add.text(0, -20, "Level " + level + "!", { fontSize: '32px', color: '#5d4037' }).setOrigin(0.5);
+    let btn = scene.add.image(0, 60, 'btn_start').setInteractive(); fitToWidth(btn, 120);
+    btn.on('pointerdown', () => { uiPanel.destroy(); startLevel(scene); });
+    uiPanel.add([box, txt, btn]);
+}
+
 function triggerEnd(scene) {
     gameState = 'RESULT';
     brownie.setVisible(false);
-    let title = (bites === 0) ? "Doggo Mommy" : (bites < 3 ? "Buddy" : "The Toy");
-    let desc = (bites === 0) ? "You're the BEST! Brownie loves you so much." : (bites < 3 ? "Brownie adores you! She sees you as a good friend." : "Uh-oh! Brownie thinks your hand is her favorite toy!");
-    showDialogue(scene, title, desc, 600);
+    statusBar.setVisible(false);
+    uiPanel = scene.add.container(400, 300).setDepth(500);
+    let box = scene.add.image(0, 0, 'ui_box'); fitToWidth(box, 600);
+    
+    let title = (bites === 0) ? "Doggo Mommy" : (bites < 5 ? "Buddy" : "The Toy");
+    let desc = (bites === 0) ? "You're the BEST! Brownie loves you so much." : (bites < 5 ? "Brownie adores you! She sees you as a good friend." : "Uh-oh! Brownie thinks your hand is her favorite toy!");
+    
+    let tTxt = scene.add.text(0, -80, title, { fontSize: '40px', color: '#8d6e63', fontStyle: 'bold' }).setOrigin(0.5);
+    let bTxt = scene.add.text(0, 20, desc, { fontSize: '22px', color: '#5d4037', align: 'center', wordWrap: { width: 500 } }).setOrigin(0.5);
+    let btn = scene.add.image(0, 130, 'btn_start').setInteractive(); fitToWidth(btn, 130);
+    
+    btn.on('pointerdown', () => { uiPanel.destroy(); startDressUp(scene); });
+    uiPanel.add([box, tTxt, bTxt, btn]);
 }
 
 function startDressUp(scene) {
     gameState = 'DRESS_UP';
-    this.input.setDefaultCursor('auto');
     hand.setVisible(false);
+    this.input.setDefaultCursor('auto');
     brownie.setPosition(400, 350).setVisible(true).play('idle');
     fitToWidth(brownie, 250); 
     
-    scene.add.rectangle(400, 50, 800, 80, 0x5d4037);
-    scene.add.text(400, 50, "WINNER! CLICK ITEMS TO DRESS UP BROWNIE", { fontSize: '28px', color: '#ffffff' }).setOrigin(0.5);
+    let topBox = scene.add.image(400, 80, 'ui_box'); fitToWidth(topBox, 500);
+    scene.add.text(400, 80, "YOU WON! CLICK ITEMS TO DRESS UP", { fontSize: '28px', color: '#5d4037' }).setOrigin(0.5);
 
     const items = ['acc_hat', 'acc_scarf', 'acc_bow', 'acc_sunflower'];
     items.forEach((item, i) => {
