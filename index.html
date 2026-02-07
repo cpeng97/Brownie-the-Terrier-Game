@@ -24,27 +24,23 @@ let brownie, hand, currentAcc, score = 0, bites = 0, level = 1, petsThisLevel = 
 let gameState = 'ONBOARDING', uiPanel, statusBar, progressBar, progressFill;
 let hearts = [], bandages = [], spots = [];
 
-function setScaleFixed(item, targetWidth) {
-    if(!item || !item.width) return;
-    item.setScale(targetWidth / item.width);
-}
-
 function preload() {
-    // --- DEBUG: Help us see what is missing ---
+    // --- DEBUGGING POPUP ---
     this.load.on('loaderror', function (file) {
-        console.log("ERROR LOADING: " + file.src);
+        alert("FILE MISSING: " + file.src + "\nPlease check your GitHub folder and match the spelling/caps exactly!");
     });
 
-    // 1. UPDATED BACKGROUND NAME
+    // 1. BACKGROUND (Double check this name on GitHub!)
     this.load.image('bg', 'assets/bg/bg_room_2.png'); 
 
-    // 2. OTHER ASSETS
+    // 2. OVERLAYS
     this.load.image('ol_barrel', 'assets/bg/bg_overlay_barrel.png');
     this.load.image('ol_bush', 'assets/bg/bg_overlay_bush.png');
     this.load.image('ol_grass', 'assets/bg/bg_overlay_dry_grass.png'); 
     this.load.image('ol_wood', 'assets/bg/bg_overlay_wood.png');
     this.load.image('ol_apple', 'assets/bg/bg_overlay_apple.png');
     
+    // 3. SPRITES
     this.load.image('b_idle1', 'assets/sprites/brownie_idle.png');
     this.load.image('b_idle2', 'assets/sprites/brownie_idle_2.png');
     this.load.image('b_idle3', 'assets/sprites/brownie_idle_3.png');
@@ -52,18 +48,17 @@ function preload() {
     this.load.image('b_excite2', 'assets/sprites/brownie_excited_2.png');
     this.load.image('b_happy', 'assets/sprites/brownie_happy.png');
     this.load.image('b_bite', 'assets/sprites/brownie_bite.png');
-
     this.load.image('h_neutral', 'assets/sprites/hand_neutral.png');
     this.load.image('h_pet', 'assets/sprites/hand_petting.png');
     this.load.image('h_hurt', 'assets/sprites/hand_hurt.png');
 
-    // Make sure assets/ui/box.png is correct on GitHub!
+    // 4. UI
     this.load.image('ui_box', 'assets/ui/box.png'); 
     this.load.image('btn_start', 'assets/ui/ui_button_start.png');
     this.load.image('ui_heart', 'assets/ui/ui_heart_full.png');
     this.load.image('ui_bandage', 'assets/ui/ui_bandage.png');
     
-    // Dress Up
+    // 5. DRESS UP
     this.load.image('br_naked', 'assets/sprites/brownie_idle.png');
     this.load.image('br_hat', 'assets/acc/brownie_hat.png');
     this.load.image('br_scarf', 'assets/acc/brownie_scarf.png');
@@ -74,11 +69,13 @@ function preload() {
 function create() {
     const scene = this;
 
-    // Background Safety: If bg_room_2 fails, show brown color so it's not black
-    this.add.rectangle(400, 300, 800, 600, 0x4e342e);
-    let bgImg = this.add.image(400, 300, 'bg').setDisplaySize(800, 600);
+    // Safety: Draw a green rectangle first so it's not black if BG fails
+    this.add.rectangle(400, 300, 800, 600, 0x71ad44); 
+    
+    // Load BG
+    let background = this.add.image(400, 300, 'bg').setDisplaySize(800, 600);
 
-    // Placement
+    // Set Placement Spots
     spots = [
         {x: 210, y: 500, img: 'ol_barrel', w: 180},
         {x: 480, y: 500, img: 'ol_grass', w: 240},
@@ -89,35 +86,31 @@ function create() {
 
     spots.forEach(s => {
         let img = this.add.image(s.x, s.y, s.img).setDepth(20);
-        setScaleFixed(img, s.w);
+        if (img.texture.key !== '__MISSING') img.setDisplaySize(s.w, (img.height/img.width)*s.w);
     });
 
     this.anims.create({ key: 'idle', frames: [{key:'b_idle1'}, {key:'b_idle2'}, {key:'b_idle3'}], frameRate: 4, repeat: -1 });
     this.anims.create({ key: 'excite', frames: [{key:'b_excite1'}, {key:'b_excite2'}], frameRate: 10, repeat: -1 });
     
-    brownie = this.add.sprite(400, 400, 'b_idle1').setInteractive().setDepth(15);
-    setScaleFixed(brownie, 85);
+    brownie = this.add.sprite(400, 400, 'b_idle1').setInteractive().setDepth(15).setDisplaySize(90, 90);
     brownie.setVisible(false);
 
     createStatusBar(this);
     createProgressBar(this);
 
-    hand = this.add.sprite(0, 0, 'h_neutral').setDepth(2000);
-    setScaleFixed(hand, 100);
+    hand = this.add.sprite(0, 0, 'h_neutral').setDepth(2000).setDisplaySize(100, 100);
     this.input.setDefaultCursor('none');
     this.input.on('pointermove', (p) => { hand.setPosition(p.x, p.y); });
 
-    showDialogue(this, "MEET BROWNIE", "Brownie is a cute Norwich Terrier who loves to play! She'll run between spots—pet her only while she's moving.\n\nInstructions: Tap to pet. Pet when she's calm for points. Avoid her when she's too excited!");
+    showDialogue(this, "MEET BROWNIE", "Brownie is a cute Norwich Terrier who loves to play! \nShe'll run between spots—pet her only while she's moving.\n\nInstructions: Tap to pet. Pet when she's calm for points. \nAvoid her when she's too excited!");
 
     brownie.on('pointerdown', () => handleInteraction(scene));
 }
 
-// ... (Rest of the code logic remains the same) ...
-
 function createProgressBar(scene) {
     progressBar = scene.add.container(400, 580).setDepth(1000).setVisible(false);
     let bg = scene.add.rectangle(0, 0, 300, 20, 0x3e2723).setStrokeStyle(2, 0x5d4037);
-    progressFill = scene.add.rectangle(-150, 0, 0, 16, 0x8d6e63).setOrigin(0, 0.5);
+    progressFill = scene.add.rectangle(-150, 0, 0, 16, 0xfce38a).setOrigin(0, 0.5);
     progressBar.add([bg, progressFill]);
 }
 
@@ -135,6 +128,24 @@ function createStatusBar(scene) {
         bandages.push(b);
     }
     statusBar.add([barBg]);
+}
+
+function showDialogue(scene, title, body) {
+    gameState = 'PAUSE';
+    if (uiPanel) uiPanel.destroy();
+    uiPanel = scene.add.container(400, 300).setDepth(3000);
+    let box = scene.add.image(0, 0, 'ui_box').setDisplaySize(600, 420);
+    let tTxt = scene.add.text(0, -110, title, { fontSize: '42px', color: '#5d4037', fontStyle: 'bold' }).setOrigin(0.5);
+    let bTxt = scene.add.text(0, 20, body, { fontSize: '24px', color: '#5d4037', align: 'center', wordWrap: {width: 500} }).setOrigin(0.5);
+    let btn = scene.add.image(0, 150, 'btn_start').setInteractive().setDisplaySize(160, 60);
+    btn.on('pointerdown', () => {
+        uiPanel.destroy();
+        statusBar.setVisible(true);
+        progressBar.setVisible(true);
+        gameState = 'PLAY';
+        moveBrownie(scene);
+    });
+    uiPanel.add([box, tTxt, bTxt, btn]);
 }
 
 function handleInteraction(scene) {
@@ -156,7 +167,7 @@ function handleInteraction(scene) {
         if (petsThisLevel >= goal) {
             level++;
             if(level > 3) triggerResult(scene);
-            else showDialogue(scene, "LEVEL COMPLETE", "Ready for Level " + level + "?");
+            else showDialogue(scene, "LEVEL COMPLETE", "Brownie is having fun! Ready for Level " + level + "?");
         }
     }
     scene.time.delayedCall(400, () => { if(gameState === 'PLAY') hand.setTexture('h_neutral'); });
@@ -168,11 +179,11 @@ function moveBrownie(scene) {
     let end = spots[Math.floor(Math.random() * spots.length)];
     while(start === end) { end = spots[Math.floor(Math.random() * spots.length)]; }
     brownie.setPosition(start.x, start.y).setVisible(true).setData('isMoving', true);
-    dogMood = (level > 1 && Math.random() > 0.6) ? 'excited' : 'calm';
+    dogMood = (Math.random() > 0.6) ? 'excited' : 'calm';
     brownie.play(dogMood === 'excited' ? 'excite' : 'idle');
     scene.tweens.add({
         targets: brownie, x: end.x, y: end.y,
-        duration: Math.max(800, 2500 - (level * 500)),
+        duration: Math.max(800, 2800 - (level * 600)),
         onComplete: () => {
             brownie.setVisible(false).setData('isMoving', false);
             scene.time.delayedCall(Phaser.Math.Between(500, 1500), () => moveBrownie(scene));
@@ -180,47 +191,23 @@ function moveBrownie(scene) {
     });
 }
 
-function showDialogue(scene, title, body) {
-    gameState = 'PAUSE';
-    if (uiPanel) uiPanel.destroy();
-    uiPanel = scene.add.container(400, 300).setDepth(3000);
-    // Safety brown box
-    let safety = scene.add.rectangle(0, 0, 600, 400, 0x3e2723, 0.9).setStrokeStyle(4, 0x5d4037);
-    let box = scene.add.image(0, 0, 'ui_box').setDisplaySize(600, 400);
-    let tTxt = scene.add.text(0, -80, title, { fontSize: '42px', color: '#ffffff', fontStyle: 'bold' }).setOrigin(0.5);
-    let bTxt = scene.add.text(0, 20, body, { fontSize: '24px', color: '#ffffff', align: 'center', wordWrap: {width: 500} }).setOrigin(0.5);
-    let btn = scene.add.image(0, 150, 'btn_start').setInteractive().setDisplaySize(160, 60);
-    btn.on('pointerdown', () => {
-        uiPanel.destroy();
-        statusBar.setVisible(true);
-        progressBar.setVisible(true);
-        gameState = 'PLAY';
-        moveBrownie(scene);
-    });
-    uiPanel.add([safety, box, tTxt, bTxt, btn]);
-}
-
 function triggerResult(scene) {
     gameState = 'RESULT';
-    brownie.setVisible(false);
-    statusBar.setVisible(false);
-    progressBar.setVisible(false);
+    brownie.setVisible(false); statusBar.setVisible(false); progressBar.setVisible(false);
     uiPanel = scene.add.container(400, 300).setDepth(3000);
-    let safety = scene.add.rectangle(0, 0, 650, 450, 0x3e2723, 0.9).setStrokeStyle(4, 0x5d4037);
     let box = scene.add.image(0, 0, 'ui_box').setDisplaySize(650, 450);
     let title = (bites === 0) ? "DOGGO MOMMY" : (bites < 5 ? "BUDDY" : "THE TOY");
     let desc = (bites === 0) ? "You're the BEST! Brownie loves you so much." : (bites < 5 ? "You made a few mistakes, but Brownie still adores you!" : "Uh-oh! Brownie thinks you're THE BEST TOY in the world!");
-    let tTxt = scene.add.text(0, -100, title, { fontSize: '48px', color: '#ffffff', fontStyle: 'bold' }).setOrigin(0.5);
-    let dTxt = scene.add.text(0, 20, desc, { fontSize: '24px', color: '#ffffff', align: 'center', wordWrap: { width: 500 } }).setOrigin(0.5);
+    let tTxt = scene.add.text(0, -100, title, { fontSize: '48px', color: '#5d4037', fontStyle: 'bold' }).setOrigin(0.5);
+    let dTxt = scene.add.text(0, 20, desc, { fontSize: '24px', color: '#5d4037', align: 'center', wordWrap: { width: 500 } }).setOrigin(0.5);
     let btn = scene.add.image(0, 140, 'btn_start').setInteractive().setDisplaySize(160, 60);
     btn.on('pointerdown', () => { uiPanel.destroy(); startDressUp(scene); });
-    uiPanel.add([safety, box, tTxt, dTxt, btn]);
+    uiPanel.add([box, tTxt, dTxt, btn]);
 }
 
 function startDressUp(scene) {
     gameState = 'DRESS_UP';
-    hand.setVisible(false);
-    scene.input.setDefaultCursor('auto');
+    hand.setVisible(false); scene.input.setDefaultCursor('auto');
     brownie.setPosition(400, 350).setVisible(true).setTexture('br_naked').setDepth(100).setDisplaySize(250, 250);
     scene.add.rectangle(400, 80, 600, 80, 0x3e2723, 0.9).setStrokeStyle(2, 0x5d4037).setDepth(200);
     scene.add.text(400, 80, "YOU WON! CLICK ITEMS TO DRESS UP", { fontSize: '32px', color: '#ffffff', fontStyle: 'bold' }).setOrigin(0.5).setDepth(201);
