@@ -3,120 +3,206 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Brownie: AIGC Edition</title>
+    <title>Brownie's Petting Party</title>
+    <link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/phaser@3.55.2/dist/phaser.min.js"></script>
     <style>
-        body { margin: 0; background-color: #2c1e1a; display: flex; justify-content: center; align-items: center; height: 100vh; overflow: hidden; }
-        canvas { border: 5px solid #5d4037; border-radius: 8px; }
+        body { margin: 0; background-color: #2c1e1a; display: flex; justify-content: center; align-items: center; height: 100vh; overflow: hidden; font-family: 'VT323', monospace; }
+        canvas { border: 4px solid #5d4037; box-shadow: 0 0 30px rgba(0,0,0,0.5); }
     </style>
 </head>
 <body>
 <script>
 const config = {
     type: Phaser.AUTO,
-    width: 800,
-    height: 600,
+    width: 800, height: 600,
     scene: { preload: preload, create: create, update: update }
 };
 
 const game = new Phaser.Game(config);
-let brownie, hand, score = 0, bites = 0, gameState = 'ONBOARDING';
+let brownie, hand, currentAcc, score = 0, bites = 0, level = 1, petsThisLevel = 0;
+let gameState = 'ONBOARDING'; 
 let uiPanel, dogMood = 'calm';
 
-// HELPER FUNCTION: This resizes any image to a specific width while keeping it perfect
 function fitToWidth(item, targetWidth) {
+    if(!item) return;
     const scale = targetWidth / item.width;
     item.setScale(scale);
 }
 
 function preload() {
-    // 1. Background & Overlays
     this.load.image('bg', 'assets/bg/bg_room.png');
-    this.load.image('ol_apple', 'assets/bg/bg_overlay_apple.png');
     this.load.image('ol_barrel', 'assets/bg/bg_overlay_barrel.png');
     this.load.image('ol_bush', 'assets/bg/bg_overlay_bush.png');
     this.load.image('ol_grass', 'assets/bg/bg_overlay_dry_grass.png'); 
     this.load.image('ol_wood', 'assets/bg/bg_overlay_wood.png');
-
-    // 2. Brownie Sprites
-    this.load.image('b_idle', 'assets/sprites/brownie_idle.png');
+    this.load.image('b_idle1', 'assets/sprites/brownie_idle.png');
+    this.load.image('b_idle2', 'assets/sprites/brownie_idle_2.png');
+    this.load.image('b_idle3', 'assets/sprites/brownie_idle_3.png');
+    this.load.image('b_excite1', 'assets/sprites/brownie_excited.png');
+    this.load.image('b_excite2', 'assets/sprites/brownie_excited_2.png');
     this.load.image('b_happy', 'assets/sprites/brownie_happy.png');
     this.load.image('b_bite', 'assets/sprites/brownie_bite.png');
-
-    // 3. Hand
     this.load.image('h_neutral', 'assets/sprites/hand_neutral.png');
     this.load.image('h_pet', 'assets/sprites/hand_petting.png');
-
-    // 4. UI Elements
     this.load.image('ui_box', 'assets/ui/ui_dialogue_box.png');
     this.load.image('btn_start', 'assets/ui/ui_button_start.png');
+    this.load.image('acc_hat', 'assets/acc/acc_hat.png');
+    this.load.image('acc_scarf', 'assets/acc/acc_scarf.png');
+    this.load.image('acc_bow', 'assets/acc/acc_bow_pink.png');
+    this.load.image('acc_sunflower', 'assets/acc/acc_sunflower.png');
 }
 
 function create() {
-    // BACKGROUND: Force it to fill the 800x600 screen exactly
-    const background = this.add.image(400, 300, 'bg');
-    background.setDisplaySize(800, 600);
+    const scene = this;
+    this.add.image(400, 300, 'bg').setDisplaySize(800, 600);
 
-    // OVERLAYS: Force them to reasonable sizes
-    const barrel = this.add.image(150, 480, 'ol_barrel').setDepth(10);
-    fitToWidth(barrel, 180);
+    this.anims.create({ key: 'idle', frames: [{key:'b_idle1'}, {key:'b_idle2'}, {key:'b_idle3'}], frameRate: 4, repeat: -1 });
+    this.anims.create({ key: 'excite', frames: [{key:'b_excite1'}, {key:'b_excite2'}], frameRate: 8, repeat: -1 });
 
-    const bush = this.add.image(650, 480, 'ol_bush').setDepth(10);
-    fitToWidth(bush, 220);
+    const barrel = this.add.image(200, 480, 'ol_barrel').setDepth(10); fitToWidth(barrel, 140);
+    const bush = this.add.image(680, 500, 'ol_bush').setDepth(10); fitToWidth(bush, 180);
+    const grass = this.add.image(450, 550, 'ol_grass').setDepth(10); fitToWidth(grass, 250);
 
-    const wood = this.add.image(400, 520, 'ol_wood').setDepth(10);
-    fitToWidth(wood, 200);
+    brownie = this.add.sprite(400, 400, 'b_idle1').setInteractive().setVisible(false);
+    fitToWidth(brownie, 120); 
 
-    // BROWNIE: The star of the show
-    brownie = this.add.sprite(400, 400, 'b_idle').setInteractive().setVisible(false);
-    fitToWidth(brownie, 140); // Make her 140 pixels wide
+    currentAcc = this.add.image(400, 400, 'acc_hat').setVisible(false).setDepth(11);
+    fitToWidth(currentAcc, 120);
 
-    // HAND: Follows the mouse
     hand = this.add.sprite(0, 0, 'h_neutral').setDepth(100);
-    fitToWidth(hand, 100); // Make the hand 100 pixels wide
+    fitToWidth(hand, 100); 
     this.input.setDefaultCursor('none');
+    
+    // Hand follow and Click Animation
     this.input.on('pointermove', (p) => { hand.setPosition(p.x, p.y); });
-
-    // UI PANEL: Dialogue and Start Button
-    uiPanel = this.add.container(400, 300).setDepth(200);
-    const box = this.add.image(0, 0, 'ui_box');
-    fitToWidth(box, 500);
-
-    const startBtn = this.add.image(0, 80, 'btn_start').setInteractive();
-    fitToWidth(startBtn, 160);
-
-    const title = this.add.text(0, -60, "Meet Brownie!", { fontSize: '36px', color: '#5d4037', fontStyle: 'bold' }).setOrigin(0.5);
-    const instruction = this.add.text(0, 0, "Tap to pet Brownie when she's calm!", { fontSize: '18px', color: '#795548' }).setOrigin(0.5);
-
-    startBtn.on('pointerdown', () => {
-        uiPanel.destroy();
-        gameState = 'PLAY';
-        spawnBrownie();
+    this.input.on('pointerdown', () => {
+        hand.setTexture('h_pet'); // Petting animation starts
+        this.time.delayedCall(150, () => { if(gameState !== 'GAMEOVER') hand.setTexture('h_neutral'); });
     });
 
-    uiPanel.add([box, title, instruction, startBtn]);
+    showOnboarding(this);
 
-    // Petting Logic
-    brownie.on('pointerdown', () => {
-        score += 10;
-        brownie.setTexture('b_happy');
-        this.time.delayedCall(400, () => brownie.setVisible(false));
-    });
+    brownie.on('pointerdown', () => handlePet(scene));
+}
+
+function showOnboarding(scene) {
+    uiPanel = scene.add.container(400, 300).setDepth(200);
+    let box = scene.add.image(0, 0, 'ui_box'); fitToWidth(box, 700);
+    
+    let story = "Meet Brownie!\n\nBrownie is a cute Norwich Terrier who loves to play! She's full of energy, loves attention, and will happily pop up for some fun petting. However, Brownie's love can be a little overwhelming! If you're too quick or too rough, she may bite your hand in surprise!\n\nInstructions: Tap to pet. Pet when she's calm for points. Avoid her when she's too excited!";
+    
+    let txt = scene.add.text(0, -50, story, { fontSize: '20px', color: '#5d4037', align: 'center', wordWrap: { width: 550 }, fontFamily: 'VT323' }).setOrigin(0.5);
+    let btn = scene.add.image(0, 160, 'btn_start').setInteractive(); fitToWidth(btn, 140);
+    
+    btn.on('pointerdown', () => { uiPanel.destroy(); startLevel(scene); });
+    uiPanel.add([box, txt, btn]);
+}
+
+function startLevel(scene) {
+    gameState = 'PLAY';
+    petsThisLevel = 0;
+    spawnBrownie();
 }
 
 function spawnBrownie() {
     if (gameState !== 'PLAY') return;
-
-    // Random location
-    const x = Phaser.Math.Between(150, 650);
-    const y = Phaser.Math.Between(250, 450);
+    const spots = [{x: 200, y: 440}, {x: 680, y: 460}, {x: 450, y: 480}, {x: 400, y: 300}];
+    let spot = spots[Math.floor(Math.random() * spots.length)];
+    brownie.setPosition(spot.x, spot.y).setVisible(true);
     
-    brownie.setPosition(x, y).setVisible(true).setTexture('b_idle');
+    // Excitement Logic
+    dogMood = (level > 1 && Math.random() > (1.0 - (level * 0.2))) ? 'excited' : 'calm';
+    brownie.play(dogMood === 'excited' ? 'excite' : 'idle');
 
-    game.scene.scenes[0].time.delayedCall(1800, () => {
+    let upTime = Math.max(600, 2000 - (level * 400));
+    game.scene.scenes[0].time.delayedCall(upTime, () => {
         brownie.setVisible(false);
-        if (gameState === 'PLAY') game.scene.scenes[0].time.delayedCall(1000, spawnBrownie);
+        if (gameState === 'PLAY') game.scene.scenes[0].time.delayedCall(800, spawnBrownie);
     });
+}
+
+function handlePet(scene) {
+    if (!brownie.visible) return;
+    if (dogMood === 'excited') {
+        bites++;
+        brownie.stop();
+        brownie.setTexture('b_bite');
+        scene.cameras.main.shake(200, 0.02);
+        if (bites >= 3) triggerGameOver(scene);
+    } else {
+        petsThisLevel++;
+        score += 10;
+        brownie.setTexture('b_happy');
+        if (petsThisLevel >= (level * 5)) checkLevelUp(scene);
+    }
+    scene.time.delayedCall(300, () => brownie.setVisible(false));
+}
+
+function checkLevelUp(scene) {
+    if (level < 3) {
+        level++;
+        gameState = 'PAUSE';
+        uiPanel = scene.add.container(400, 300).setDepth(200);
+        let box = scene.add.image(0, 0, 'ui_box'); fitToWidth(box, 400);
+        let txt = scene.add.text(0, -20, "Level " + level + "!\nBrownie is getting excited...", { fontSize: '28px', color: '#5d4037', align: 'center' }).setOrigin(0.5);
+        let btn = scene.add.image(0, 80, 'btn_start').setInteractive(); fitToWidth(btn, 120);
+        btn.on('pointerdown', () => { uiPanel.destroy(); startLevel(scene); });
+        uiPanel.add([box, txt, btn]);
+    } else {
+        showFinalResult(scene);
+    }
+}
+
+function showFinalResult(scene) {
+    gameState = 'RESULT';
+    brownie.setVisible(false);
+    uiPanel = scene.add.container(400, 300).setDepth(200);
+    let box = scene.add.image(0, 0, 'ui_box'); fitToWidth(box, 650);
+    
+    let title = "";
+    let desc = "";
+
+    if (bites === 0) {
+        title = "Doggo Mommy";
+        desc = "You're the BEST! Brownie loves you so much, she's calm and quiet like a perfect daughter. You’ve won her heart with your gentle petting!";
+    } else if (bites < 3) {
+        title = "Buddy";
+        desc = "You made a few mistakes, but Brownie still adores you! She sees you as a good friend and can't wait to play with you for hours.";
+    } else {
+        title = "The Toy";
+        desc = "Uh-oh! You made a LOT of mistakes, and Brownie thinks you're THE BEST TOY in the world. She loves your hand more than anything else!";
+    }
+
+    let tTxt = scene.add.text(0, -100, title, { fontSize: '48px', color: '#8d6e63', fontStyle: 'bold' }).setOrigin(0.5);
+    let dTxt = scene.add.text(0, 0, desc, { fontSize: '22px', color: '#5d4037', align: 'center', wordWrap: { width: 500 } }).setOrigin(0.5);
+    let btn = scene.add.image(0, 120, 'btn_start').setInteractive(); fitToWidth(btn, 140);
+    
+    btn.on('pointerdown', () => { uiPanel.destroy(); startDressUp(scene); });
+    uiPanel.add([box, tTxt, dTxt, btn]);
+}
+
+function startDressUp(scene) {
+    gameState = 'DRESS_UP';
+    brownie.setPosition(400, 400).setVisible(true).play('idle');
+    fitToWidth(brownie, 250); 
+    
+    let box = scene.add.image(400, 80, 'ui_box'); fitToWidth(box, 500);
+    scene.add.text(400, 80, "DRESS UP TIME! Click items below.", { fontSize: '24px', color: '#5d4037' }).setOrigin(0.5);
+
+    const items = ['acc_hat', 'acc_scarf', 'acc_bow', 'acc_sunflower'];
+    items.forEach((item, i) => {
+        let icon = scene.add.image(150 + (i * 150), 540, item).setInteractive();
+        fitToWidth(icon, 100);
+        icon.on('pointerdown', () => {
+            currentAcc.setTexture(item).setPosition(brownie.x, brownie.y).setVisible(true);
+            fitToWidth(currentAcc, 250);
+        });
+    });
+}
+
+function triggerGameOver(scene) {
+    showFinalResult(scene); // Use the "The Toy" outcome for Game Over
 }
 
 function update() {}
