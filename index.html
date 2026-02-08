@@ -20,27 +20,26 @@ const config = {
 };
 
 const game = new Phaser.Game(config);
-let brownie, hand, currentAcc, score = 0, bites = 0, level = 1, petsThisLevel = 0;
-let gameState = 'ONBOARDING', uiPanel, statusBar, progressBar, progressFill;
+let brownie, hand, score = 0, bites = 0, level = 1, petsThisLevel = 0;
+let gameState = 'ONBOARDING', uiContainer, statusBar, progressFill;
 let hearts = [], bandages = [], spots = [];
 
+// This function keeps the aspect ratio perfect to prevent distortion
+function fixScale(obj, targetWidth) {
+    if (!obj || !obj.width) return;
+    let ratio = targetWidth / obj.width;
+    obj.setScale(ratio);
+}
+
 function preload() {
-    // --- DEBUGGING POPUP ---
-    this.load.on('loaderror', function (file) {
-        alert("FILE MISSING: " + file.src + "\nPlease check your GitHub folder and match the spelling/caps exactly!");
-    });
-
-    // 1. BACKGROUND (Double check this name on GitHub!)
+    // Assets Loading
     this.load.image('bg', 'assets/bg/bg_room_2.png'); 
-
-    // 2. OVERLAYS
     this.load.image('ol_barrel', 'assets/bg/bg_overlay_barrel.png');
     this.load.image('ol_bush', 'assets/bg/bg_overlay_bush.png');
     this.load.image('ol_grass', 'assets/bg/bg_overlay_dry_grass.png'); 
     this.load.image('ol_wood', 'assets/bg/bg_overlay_wood.png');
     this.load.image('ol_apple', 'assets/bg/bg_overlay_apple.png');
     
-    // 3. SPRITES
     this.load.image('b_idle1', 'assets/sprites/brownie_idle.png');
     this.load.image('b_idle2', 'assets/sprites/brownie_idle_2.png');
     this.load.image('b_idle3', 'assets/sprites/brownie_idle_3.png');
@@ -48,129 +47,109 @@ function preload() {
     this.load.image('b_excite2', 'assets/sprites/brownie_excited_2.png');
     this.load.image('b_happy', 'assets/sprites/brownie_happy.png');
     this.load.image('b_bite', 'assets/sprites/brownie_bite.png');
+
     this.load.image('h_neutral', 'assets/sprites/hand_neutral.png');
     this.load.image('h_pet', 'assets/sprites/hand_petting.png');
     this.load.image('h_hurt', 'assets/sprites/hand_hurt.png');
 
-    // 4. UI
     this.load.image('ui_box', 'assets/ui/box.png'); 
     this.load.image('btn_start', 'assets/ui/ui_button_start.png');
     this.load.image('ui_heart', 'assets/ui/ui_heart_full.png');
     this.load.image('ui_bandage', 'assets/ui/ui_bandage.png');
     
-    // 5. DRESS UP
     this.load.image('br_naked', 'assets/sprites/brownie_idle.png');
     this.load.image('br_hat', 'assets/acc/brownie_hat.png');
     this.load.image('br_scarf', 'assets/acc/brownie_scarf.png');
     this.load.image('br_bow', 'assets/acc/brownie_bow.png');
     this.load.image('br_sunflower', 'assets/acc/brownie_sunflower.png');
+    this.load.image('acc_hat', 'assets/acc/acc_hat.png');
+    this.load.image('acc_scarf', 'assets/acc/acc_scarf.png');
+    this.load.image('acc_bow', 'assets/acc/acc_bow_pink.png');
+    this.load.image('acc_sunflower', 'assets/acc/acc_sunflower.png');
 }
 
 function create() {
     const scene = this;
 
-    // Safety: Draw a green rectangle first so it's not black if BG fails
-    this.add.rectangle(400, 300, 800, 600, 0x71ad44); 
-    
-    // Load BG
-    let background = this.add.image(400, 300, 'bg').setDisplaySize(800, 600);
+    // 1. BACKGROUND (Depth 0)
+    this.add.rectangle(400, 300, 800, 600, 0x4e342e).setDepth(0);
+    let bg = this.add.image(400, 300, 'bg').setDisplaySize(800, 600).setDepth(1);
 
-    // Set Placement Spots
+    // 2. OVERLAYS (Depth 200 - Brownie goes UNDER these)
     spots = [
-        {x: 210, y: 500, img: 'ol_barrel', w: 180},
-        {x: 480, y: 500, img: 'ol_grass', w: 240},
-        {x: 700, y: 480, img: 'ol_bush', w: 180},
-        {x: 180, y: 240, img: 'ol_apple', w: 140},
-        {x: 400, y: 310, img: 'ol_wood', w: 160}
+        {x: 210, y: 520, img: 'ol_barrel', w: 180},
+        {x: 480, y: 520, img: 'ol_grass', w: 240},
+        {x: 700, y: 500, img: 'ol_bush', w: 180},
+        {x: 210, y: 280, img: 'ol_apple', w: 140},
+        {x: 750, y: 460, img: 'ol_wood', w: 160}
     ];
-
     spots.forEach(s => {
-        let img = this.add.image(s.x, s.y, s.img).setDepth(20);
-        if (img.texture.key !== '__MISSING') img.setDisplaySize(s.w, (img.height/img.width)*s.w);
+        let img = this.add.image(s.x, s.y, s.img).setDepth(200);
+        fixScale(img, s.w);
     });
 
+    // 3. BROWNIE (Depth 100)
     this.anims.create({ key: 'idle', frames: [{key:'b_idle1'}, {key:'b_idle2'}, {key:'b_idle3'}], frameRate: 4, repeat: -1 });
     this.anims.create({ key: 'excite', frames: [{key:'b_excite1'}, {key:'b_excite2'}], frameRate: 10, repeat: -1 });
-    
-    brownie = this.add.sprite(400, 400, 'b_idle1').setInteractive().setDepth(15).setDisplaySize(90, 90);
-    brownie.setVisible(false);
+    brownie = this.add.sprite(400, 400, 'b_idle1').setInteractive().setDepth(100);
+    fixScale(brownie, 85);
+    brownie.setVisible(false).setData('isMoving', false);
 
-    createStatusBar(this);
-    createProgressBar(this);
+    // 4. UI STATUS BAR (Depth 500)
+    statusBar = this.add.container(680, 75).setDepth(500).setVisible(false);
+    let barBg = this.add.image(0, 0, 'ui_box').setDisplaySize(220, 110);
+    statusBar.add(barBg);
+    statusBar.add(this.add.text(-90, -35, "LIFE", { fontSize: '20px', color: '#5d4037', fontStyle: 'bold' }));
+    for(let i=0; i<3; i++) {
+        let h = this.add.image(-40 + (i*30), -30, 'ui_heart').setDisplaySize(22, 22);
+        hearts.push(h); statusBar.add(h);
+    }
+    statusBar.add(this.add.text(-90, 5, "BITES", { fontSize: '20px', color: '#5d4037', fontStyle: 'bold' }));
+    for(let i=0; i<5; i++) {
+        let b = this.add.image(-35 + (i*28), 15, 'ui_bandage').setDisplaySize(24, 24).setAlpha(0.2);
+        bandages.push(b); statusBar.add(b);
+    }
 
-    hand = this.add.sprite(0, 0, 'h_neutral').setDepth(2000).setDisplaySize(100, 100);
+    // 5. THE HAND (Depth 9999 - ALWAYS TOP)
+    hand = this.add.sprite(0, 0, 'h_neutral').setDepth(9999);
+    fixScale(hand, 100);
     this.input.setDefaultCursor('none');
     this.input.on('pointermove', (p) => { hand.setPosition(p.x, p.y); });
+    
+    // Hand Click animation
+    this.input.on('pointerdown', () => {
+        if (gameState === 'DRESS_UP') return;
+        hand.setTexture('h_pet');
+        fixScale(hand, 100);
+        this.time.delayedCall(150, () => { 
+            if(gameState !== 'RESULT' && gameState !== 'GAMEOVER') {
+                hand.setTexture('h_neutral');
+                fixScale(hand, 100);
+            }
+        });
+    });
 
-    showDialogue(this, "MEET BROWNIE", "Brownie is a cute Norwich Terrier who loves to play! \nShe'll run between spots—pet her only while she's moving.\n\nInstructions: Tap to pet. Pet when she's calm for points. \nAvoid her when she's too excited!");
+    // 6. ONBOARDING
+    showDialogue(this, "MEET BROWNIE", "Brownie will run between spots—pet her ONLY while she's moving!\n\nInstructions: Tap to pet. Pet when she's calm for points. Avoid her when she's too excited!");
 
     brownie.on('pointerdown', () => handleInteraction(scene));
 }
 
-function createProgressBar(scene) {
-    progressBar = scene.add.container(400, 580).setDepth(1000).setVisible(false);
-    let bg = scene.add.rectangle(0, 0, 300, 20, 0x3e2723).setStrokeStyle(2, 0x5d4037);
-    progressFill = scene.add.rectangle(-150, 0, 0, 16, 0xfce38a).setOrigin(0, 0.5);
-    progressBar.add([bg, progressFill]);
-}
-
-function createStatusBar(scene) {
-    statusBar = scene.add.container(680, 70).setDepth(1000).setVisible(false);
-    let barBg = scene.add.image(0, 0, 'ui_box').setDisplaySize(220, 110);
-    scene.add.text(-90, -35, "LIFE", { fontSize: '22px', color: '#5d4037', fontStyle: 'bold' });
-    for(let i=0; i<3; i++) {
-        let h = scene.add.image(-40 + (i*30), -30, 'ui_heart').setDisplaySize(22, 22);
-        hearts.push(h);
-    }
-    scene.add.text(-90, 5, "BITES", { fontSize: '20px', color: '#5d4037', fontStyle: 'bold' });
-    for(let i=0; i<5; i++) {
-        let b = scene.add.image(-35 + (i*28), 15, 'ui_bandage').setDisplaySize(24, 24).setAlpha(0.2);
-        bandages.push(b);
-    }
-    statusBar.add([barBg]);
-}
-
 function showDialogue(scene, title, body) {
     gameState = 'PAUSE';
-    if (uiPanel) uiPanel.destroy();
-    uiPanel = scene.add.container(400, 300).setDepth(3000);
-    let box = scene.add.image(0, 0, 'ui_box').setDisplaySize(600, 420);
-    let tTxt = scene.add.text(0, -110, title, { fontSize: '42px', color: '#5d4037', fontStyle: 'bold' }).setOrigin(0.5);
+    uiContainer = scene.add.container(400, 300).setDepth(5000);
+    let box = scene.add.image(0, 0, 'ui_box').setDisplaySize(650, 450);
+    let tTxt = scene.add.text(0, -120, title, { fontSize: '42px', color: '#5d4037', fontStyle: 'bold' }).setOrigin(0.5);
     let bTxt = scene.add.text(0, 20, body, { fontSize: '24px', color: '#5d4037', align: 'center', wordWrap: {width: 500} }).setOrigin(0.5);
-    let btn = scene.add.image(0, 150, 'btn_start').setInteractive().setDisplaySize(160, 60);
+    let btn = scene.add.image(0, 160, 'btn_start').setInteractive().setDisplaySize(160, 60);
+    
     btn.on('pointerdown', () => {
-        uiPanel.destroy();
+        uiContainer.destroy();
         statusBar.setVisible(true);
-        progressBar.setVisible(true);
         gameState = 'PLAY';
         moveBrownie(scene);
     });
-    uiPanel.add([box, tTxt, bTxt, btn]);
-}
-
-function handleInteraction(scene) {
-    if (gameState !== 'PLAY' || brownie.getData('isMoving') === false) return;
-    if (dogMood === 'excited') {
-        bites++;
-        for(let i=0; i<bites; i++) { if(bandages[i]) bandages[i].setAlpha(1); }
-        brownie.stop().setTexture('b_bite');
-        hand.setTexture('h_hurt');
-        scene.cameras.main.shake(200, 0.02);
-        if (bites >= 5) triggerResult(scene);
-    } else {
-        petsThisLevel++;
-        score += 10;
-        let goal = level * 3;
-        progressFill.width = (petsThisLevel / goal) * 300;
-        brownie.setTexture('b_happy');
-        hand.setTexture('h_pet');
-        if (petsThisLevel >= goal) {
-            level++;
-            if(level > 3) triggerResult(scene);
-            else showDialogue(scene, "LEVEL COMPLETE", "Brownie is having fun! Ready for Level " + level + "?");
-        }
-    }
-    scene.time.delayedCall(400, () => { if(gameState === 'PLAY') hand.setTexture('h_neutral'); });
+    uiContainer.add([box, tTxt, bTxt, btn]);
 }
 
 function moveBrownie(scene) {
@@ -178,12 +157,16 @@ function moveBrownie(scene) {
     let start = spots[Math.floor(Math.random() * spots.length)];
     let end = spots[Math.floor(Math.random() * spots.length)];
     while(start === end) { end = spots[Math.floor(Math.random() * spots.length)]; }
+
     brownie.setPosition(start.x, start.y).setVisible(true).setData('isMoving', true);
-    dogMood = (Math.random() > 0.6) ? 'excited' : 'calm';
-    brownie.play(dogMood === 'excited' ? 'excite' : 'idle');
+    let mood = (Math.random() > 0.6) ? 'excited' : 'calm';
+    brownie.setData('mood', mood);
+    brownie.play(mood === 'excited' ? 'excite' : 'idle');
+    fixScale(brownie, 85);
+
     scene.tweens.add({
         targets: brownie, x: end.x, y: end.y,
-        duration: Math.max(800, 2800 - (level * 600)),
+        duration: Math.max(800, 3200 - (level * 600)),
         onComplete: () => {
             brownie.setVisible(false).setData('isMoving', false);
             scene.time.delayedCall(Phaser.Math.Between(500, 1500), () => moveBrownie(scene));
@@ -191,30 +174,59 @@ function moveBrownie(scene) {
     });
 }
 
+function handleInteraction(scene) {
+    if (gameState !== 'PLAY' || !brownie.getData('isMoving')) return;
+    let mood = brownie.getData('mood');
+
+    if (mood === 'excited') {
+        bites++;
+        for(let i=0; i<bites; i++) { if(bandages[i]) bandages[i].setAlpha(1); }
+        brownie.stop().setTexture('b_bite'); fixScale(brownie, 85);
+        hand.setTexture('h_hurt'); fixScale(hand, 100);
+        scene.cameras.main.shake(200, 0.02);
+        if (bites >= 5) triggerResult(scene);
+    } else {
+        petsThisLevel++; score += 10;
+        brownie.setTexture('b_happy'); fixScale(brownie, 85);
+        if (petsThisLevel >= (level * 3)) {
+            level++;
+            if(level > 3) triggerResult(scene);
+            else {
+                gameState = 'PAUSE';
+                showDialogue(scene, "LEVEL COMPLETE", "Brownie is moving faster! Ready for Level " + level + "?");
+            }
+        }
+    }
+    scene.time.delayedCall(400, () => { if(gameState === 'PLAY') { hand.setTexture('h_neutral'); fixScale(hand, 100); } });
+}
+
 function triggerResult(scene) {
     gameState = 'RESULT';
-    brownie.setVisible(false); statusBar.setVisible(false); progressBar.setVisible(false);
-    uiPanel = scene.add.container(400, 300).setDepth(3000);
-    let box = scene.add.image(0, 0, 'ui_box').setDisplaySize(650, 450);
+    brownie.setVisible(false); statusBar.setVisible(false);
     let title = (bites === 0) ? "DOGGO MOMMY" : (bites < 5 ? "BUDDY" : "THE TOY");
-    let desc = (bites === 0) ? "You're the BEST! Brownie loves you so much." : (bites < 5 ? "You made a few mistakes, but Brownie still adores you!" : "Uh-oh! Brownie thinks you're THE BEST TOY in the world!");
-    let tTxt = scene.add.text(0, -100, title, { fontSize: '48px', color: '#5d4037', fontStyle: 'bold' }).setOrigin(0.5);
-    let dTxt = scene.add.text(0, 20, desc, { fontSize: '24px', color: '#5d4037', align: 'center', wordWrap: { width: 500 } }).setOrigin(0.5);
-    let btn = scene.add.image(0, 140, 'btn_start').setInteractive().setDisplaySize(160, 60);
-    btn.on('pointerdown', () => { uiPanel.destroy(); startDressUp(scene); });
-    uiPanel.add([box, tTxt, dTxt, btn]);
+    let desc = (bites === 0) ? "You're the BEST! Brownie loves you so much." : (bites < 5 ? "You made a few mistakes, but Brownie still adores you!" : "Uh-oh! Brownie thinks your hand is a snack!");
+    showDialogue(scene, title, desc);
 }
 
 function startDressUp(scene) {
     gameState = 'DRESS_UP';
     hand.setVisible(false); scene.input.setDefaultCursor('auto');
-    brownie.setPosition(400, 350).setVisible(true).setTexture('br_naked').setDepth(100).setDisplaySize(250, 250);
+    brownie.setPosition(400, 350).setVisible(true).setTexture('br_naked').setDepth(100);
+    fixScale(brownie, 250);
+    
     scene.add.rectangle(400, 80, 600, 80, 0x3e2723, 0.9).setStrokeStyle(2, 0x5d4037).setDepth(200);
     scene.add.text(400, 80, "YOU WON! CLICK ITEMS TO DRESS UP", { fontSize: '32px', color: '#ffffff', fontStyle: 'bold' }).setOrigin(0.5).setDepth(201);
+    
     const items = [{key: 'br_hat', icon: 'acc_hat'}, {key: 'br_scarf', icon: 'acc_scarf'}, {key: 'br_bow', icon: 'acc_bow'}, {key: 'br_sunflower', icon: 'acc_sunflower'}];
     items.forEach((item, i) => {
-        let icon = scene.add.image(150 + (i * 150), 520, item.icon).setInteractive().setDepth(200).setDisplaySize(100, 100);
-        icon.on('pointerdown', () => { brownie.setTexture(item.key).setDisplaySize(250, 250); });
+        let icon = scene.add.image(150 + (i * 150), 520, item.icon).setInteractive().setDepth(200);
+        fixScale(icon, 100);
+        icon.on('pointerdown', () => { 
+            if (scene.textures.exists(item.key)) {
+                brownie.setTexture(item.key); 
+                fixScale(brownie, 250);
+            }
+        });
     });
 }
 
